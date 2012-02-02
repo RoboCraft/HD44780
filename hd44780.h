@@ -56,11 +56,11 @@ typedef struct
 
 typedef struct
 {
-  HD44780_Pin rs_pin; // LOW: command.  HIGH: character.
-  HD44780_Pin enable_pin; // activated by a HIGH pulse.
-  HD44780_Pin rw_pin; // LOW: write to LCD.  HIGH: read from LCD.
-  HD44780_Pin backlight_pin;
-  HD44780_Pin data_pins[8];
+  HD44780_Pin rs;         // LOW: command.  HIGH: character.
+  HD44780_Pin enable;     // activated by a HIGH pulse.
+  HD44780_Pin rw;         // LOW: write to LCD.  HIGH: read from LCD.
+  HD44780_Pin backlight;  // should be connected to base/gate of transistor/FET
+  HD44780_Pin dp[8];      // data pins
 } HD44780_Pinout;
 
 typedef enum { HD44780_OK, HD44780_ERROR } HD44780_Result;
@@ -69,20 +69,19 @@ typedef enum { HD44780_PIN_LOW, HD44780_PIN_HIGH } HD44780_PinState;
 
 typedef struct
 {
-  /* Should return 0 on success */
-  HD44780_Result (*pin_config)(HD44780_Pin *pin, HD44780_PinMode mode);
-  HD44780_Result (*pin_write)(HD44780_Pin *pin, HD44780_PinState value);
-  //BitAction (*pin_read)(HD44780_Pin *pin);
+  HD44780_Result (*configure)(HD44780_Pin *pin, HD44780_PinMode mode);
+  HD44780_Result (*write)(HD44780_Pin *pin, HD44780_PinState value);
 } PinDriver;
 
-#ifdef HD44780_USE_STM32F10X
-  extern const PinDriver STM32F10X_LineDriver;
 
-  HD44780_Result stm32f10x_default_pin_config(HD44780_Pin *pin, HD44780_PinMode mode);
-  HD44780_Result stm32f10x_default_pin_write(HD44780_Pin *pin, HD44780_PinState value);
-  //HD44780_PinState stm32f10x_default_pin_read(HD44780_Pin *pin);
+#ifdef HD44780_USE_STM32F10X
+HD44780_Result stm32f10x_default_pin_config(HD44780_Pin *pin, HD44780_PinMode mode);
+HD44780_Result stm32f10x_default_pin_write(HD44780_Pin *pin, HD44780_PinState value);
+extern const PinDriver STM32F10X_PinDriver;
 #endif
 
+
+/* Hardware abstraction layer */
 typedef struct
 {
   PinDriver pins;
@@ -91,6 +90,8 @@ typedef struct
 
 typedef struct
 {
+  HD44780_HAL hal;
+
   uint8_t displayfunction;
   uint8_t displaycontrol;
   uint8_t displaymode;
@@ -98,94 +99,39 @@ typedef struct
   uint8_t numlines;
   uint8_t currline;
 
-  HD44780_Pin rs_pin; // LOW: command.  HIGH: character.
-  HD44780_Pin rw_pin; // LOW: write to LCD.  HIGH: read from LCD.
-  HD44780_Pin enable_pin; // activated by a HIGH pulse.
-  HD44780_Pin data_pins[8];
-  HD44780_Pin backlight_pin; // should be connected to the base of a transistor
-
-  HD44780_HAL hal;
+  HD44780_Pinout pinout;
+  unsigned dp_offset;
+  unsigned dp_amount;
 } HD44780;
 
 typedef enum { HD44780_MODE_4BIT, HD44780_MODE_8BIT } HD44780_Mode;
 
 HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
-    HD44780_HAL *hal, HD44780_Pinout *pinout, uint8_t cols, uint8_t lines, uint8_t charsize);
+    const HD44780_HAL *hal, const HD44780_Pinout *pinout,
+    uint8_t cols, uint8_t lines, uint8_t charsize);
+HD44780_Result hd44780_write(HD44780 *display, uint8_t value);
 HD44780_Result hd44780_clear(HD44780 *display);
-void hd44780_home(HD44780 *display);
-void hd44780_noDisplay(HD44780 *display);
-void hd44780_display(HD44780 *display);
-void hd44780_noBlink(HD44780 *display);
-void hd44780_blink(HD44780 *display);
-void hd44780_noCursor(HD44780 *display);
-void hd44780_cursor(HD44780 *display);
-void hd44780_scrollDisplayLeft(HD44780 *display);
-void hd44780_scrollDisplayRight(HD44780 *display);
-void hd44780_leftToRight(HD44780 *display);
-void hd44780_rightToLeft(HD44780 *display);
-void hd44780_autoscroll(HD44780 *display);
-void hd44780_noAutoscroll(HD44780 *display);
-void hd44780_createChar(HD44780 *display, uint8_t location, uint8_t *charmap);
-void hd44780_setCursor(HD44780 *display, uint8_t col, uint8_t row);
+HD44780_Result hd44780_home(HD44780 *display);
+HD44780_Result hd44780_display_off(HD44780 *display);
+HD44780_Result hd44780_display_on(HD44780 *display);
+HD44780_Result hd44780_noBlink(HD44780 *display);
+HD44780_Result hd44780_blink(HD44780 *display);
+HD44780_Result hd44780_noCursor(HD44780 *display);
+HD44780_Result hd44780_cursor(HD44780 *display);
+HD44780_Result hd44780_scrollDisplayLeft(HD44780 *display);
+HD44780_Result hd44780_scrollDisplayRight(HD44780 *display);
+HD44780_Result hd44780_leftToRight(HD44780 *display);
+HD44780_Result hd44780_rightToLeft(HD44780 *display);
+HD44780_Result hd44780_autoscroll(HD44780 *display);
+HD44780_Result hd44780_noAutoscroll(HD44780 *display);
+HD44780_Result hd44780_createChar(HD44780 *display, uint8_t location, uint8_t *charmap);
+HD44780_Result hd44780_setCursor(HD44780 *display, uint8_t col, uint8_t row);
 
 HD44780_Result hd44780_config(HD44780 *display);
-void hd44780_write(HD44780 *display, uint8_t value);
-void hd44780_write8bits(HD44780 *display, uint8_t value);
-void hd44780_write4bits(HD44780 *display, uint8_t value);
-void hd44780_command(HD44780 *display, uint8_t value);
-void hd44780_send(HD44780 *display, uint8_t value, uint8_t mode);
-void hd44780_pulse_enable_pin(HD44780 *display);
-
-
-/*
-class LiquidCrystal: public LiquidCrystalBase
-{
-public:
-  LiquidCrystal(uint8_t rs, uint8_t enable,
-    uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3,
-    uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7,
-    LineDriver *line_driver = 0, uint8_t backlight = 0xFF);
-
-  LiquidCrystal(uint8_t rs, uint8_t rw, uint8_t enable,
-    uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3,
-    uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7,
-    LineDriver *line_driver = 0, uint8_t backlight = 0xFF);
-
-  LiquidCrystal(uint8_t rs, uint8_t rw, uint8_t enable,
-    uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3,
-    LineDriver *line_driver = 0, uint8_t backlight = 0xFF);
-
-  LiquidCrystal(uint8_t rs, uint8_t enable,
-    uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3,
-    LineDriver *line_driver = 0, uint8_t backlight = 0xFF);
-
-  void backlight(bool on = true);
-  void noBacklight();
-
-protected:
-  void init(uint8_t fourbitmode, uint8_t rs, uint8_t rw, uint8_t enable,
-    uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3,
-    uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7,
-    uint8_t backlight, LineDriver *line_driver);
-
-  virtual void config();
-  virtual void send(uint8_t, uint8_t);
-  virtual void write4bits(uint8_t);
-  void write8bits(uint8_t);
-  void pulseEnable();
-
-  LineDriver *_pins;
-  uint8_t _rs_pin; // LOW: command.  HIGH: character.
-  uint8_t _rw_pin; // LOW: write to LCD.  HIGH: read from LCD.
-  uint8_t _enable_pin; // activated by a HIGH pulse.
-  uint8_t _data_pins[8];
-  uint8_t _backlight_pin; // should be connected to the base of a transistor
-
-  uint8_t _displayfunction;
-  uint8_t _displaycontrol;
-  uint8_t _displaymode;
-  uint8_t _initialized;
-  uint8_t _numlines,_currline;
-};*/
+HD44780_Result hd44780_command(HD44780 *display, uint8_t value);
+HD44780_Result hd44780_send(HD44780 *display, uint8_t value, uint8_t mode);
+HD44780_Result hd44780_write8bits(HD44780 *display, uint8_t value);
+HD44780_Result hd44780_write4bits(HD44780 *display, uint8_t value);
+HD44780_Result hd44780_pulse_enable_pin(HD44780 *display);
 
 #endif /* HC44780_H_ */
