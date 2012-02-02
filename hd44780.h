@@ -142,6 +142,16 @@ HD44780_Result hd44780_write8bits(HD44780 *display, uint8_t value);
 HD44780_Result hd44780_write4bits(HD44780 *display, uint8_t value);
 HD44780_Result hd44780_pulse_enable_pin(HD44780 *display);
 
+#define HD44780_MAKE_8BITS(b0,b1,b2,b3,b4,b5,b6,b7) \
+    (((b0) & 1) | \
+     ((b1) & 1) << 1 | \
+     ((b2) & 1) << 2 | \
+     ((b3) & 1) << 3 | \
+     ((b4) & 1) << 4 | \
+     ((b5) & 1) << 5 | \
+     ((b6) & 1) << 6 | \
+     ((b7) & 1) << 7)
+
 #ifdef __cplusplus
 }
 #endif

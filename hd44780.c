@@ -36,10 +36,6 @@ HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
   HD44780_RETURN_ASSERT(cols > 0, HD44780_ERROR);
   HD44780_RETURN_ASSERT(lines > 0, HD44780_ERROR);
 
-  /* For some 1 line displays you can select a 10 pixel high font */
-  if ((charsize != 0) && (lines == 1))
-    display->displayfunction |= HD44780_FLAG_5x10DOTS;
-
   display->hal = *hal;
   display->pinout = *pinout;
 
@@ -67,6 +63,10 @@ HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
     display->dp_offset = 0;
     display->dp_amount = 8;
   }
+
+  /* For some 1 line displays you can select a 10 pixel high font */
+  if ((charsize != 0) && (lines == 1))
+    display->displayfunction |= HD44780_FLAG_5x10DOTS;
 
   if (lines > 1)
     display->displayfunction |= HD44780_FLAG_2LINE;
@@ -136,7 +136,7 @@ HD44780_Result hd44780_write_byte(HD44780 *display, uint8_t value)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
 
-  hd44780_send(display, value, SET);
+  hd44780_send(display, value, HD44780_PIN_HIGH);
 
   return HD44780_OK;
 }
@@ -273,15 +273,18 @@ HD44780_Result hd44780_right_to_left(HD44780 *display)
   return hd44780_command(display, HD44780_CMD_ENTRYMODESET | display->displaymode);
 }
 
+/* FIXME moves the cursor off screen */
 HD44780_Result hd44780_create_char(HD44780 *display, uint8_t location, const uint8_t *charmap)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(charmap != NULL, HD44780_ERROR);
 
   location &= 0x7; // we only have 8 locations 0-7
-  hd44780_command(display, HD44780_CMD_SETCGRAMADDR | (location << 3));
 
-  for (int i = 0; i < 8; ++i)
+  if (hd44780_command(display, HD44780_CMD_SETCGRAMADDR | (location << 3)) != HD44780_OK)
+    return HD44780_ERROR;
+
+  for (unsigned i = 0; i < 8; ++i)
   {
     if (hd44780_write_byte(display, charmap[i]) != HD44780_OK)
       return HD44780_ERROR;
@@ -289,7 +292,6 @@ HD44780_Result hd44780_create_char(HD44780 *display, uint8_t location, const uin
 
   return HD44780_OK;
 }
-
 
 HD44780_Result hd44780_move_cursor(HD44780 *display, uint8_t column, uint8_t row)
 {
@@ -336,7 +338,7 @@ HD44780_Result hd44780_command(HD44780 *display, uint8_t value)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
 
-  hd44780_send(display, value, RESET);
+  hd44780_send(display, value, HD44780_PIN_LOW);
 
   return HD44780_OK;
 }
