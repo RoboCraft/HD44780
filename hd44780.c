@@ -29,7 +29,6 @@ HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(hal != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(hal->pins.configure != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(hal->pins.write != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(hal->delay_microseconds != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(pinout != NULL, HD44780_ERROR);
@@ -39,17 +38,20 @@ HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
   display->hal = *hal;
   display->pinout = *pinout;
 
-  display->hal.pins.configure(&display->pinout.rs, HD44780_PIN_OUTPUT);
-  display->hal.pins.configure(&display->pinout.en, HD44780_PIN_OUTPUT);
+  if (display->hal.pins.configure != NULL)
+  {
+    display->hal.pins.configure(&display->pinout.rs, HD44780_PIN_OUTPUT);
+    display->hal.pins.configure(&display->pinout.en, HD44780_PIN_OUTPUT);
 
-  if (display->pinout.rw.gpio != NULL)
-    display->hal.pins.configure(&display->pinout.rw, HD44780_PIN_OUTPUT);
+    if (display->pinout.rw.gpio != NULL)
+      display->hal.pins.configure(&display->pinout.rw, HD44780_PIN_OUTPUT);
+
+    if (display->pinout.backlight.gpio != NULL)
+      display->hal.pins.configure(&display->pinout.backlight, HD44780_PIN_OUTPUT);
+  }
 
   if (display->pinout.backlight.gpio != NULL)
-  {
-    display->hal.pins.configure(&display->pinout.backlight, HD44780_PIN_OUTPUT);
     display->hal.pins.write(&display->pinout.backlight, HD44780_PIN_LOW);
-  }
 
   if (mode == HD44780_MODE_4BIT)
   {
@@ -273,7 +275,7 @@ HD44780_Result hd44780_right_to_left(HD44780 *display)
   return hd44780_command(display, HD44780_CMD_ENTRYMODESET | display->displaymode);
 }
 
-/* FIXME moves the cursor off screen */
+/* FIXME moves the cursor out of screen */
 HD44780_Result hd44780_create_char(HD44780 *display, uint8_t location, const uint8_t *charmap)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
@@ -309,12 +311,13 @@ HD44780_Result hd44780_config(HD44780 *display)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(display->hal.delay_microseconds != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.pins.configure != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(display->hal.pins.write != NULL, HD44780_ERROR);
 
   for (unsigned i = 0; i < display->dp_amount; ++i)
   {
-    display->hal.pins.configure(&display->pinout.dp[display->dp_offset + i], HD44780_PIN_OUTPUT);
+    if (display->hal.pins.configure != NULL)
+      display->hal.pins.configure(&display->pinout.dp[display->dp_offset + i], HD44780_PIN_OUTPUT);
+
     display->hal.pins.write(&display->pinout.dp[display->dp_offset + i], HD44780_PIN_LOW);
   }
 

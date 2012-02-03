@@ -60,17 +60,20 @@ typedef struct
 typedef struct
 {
   HD44780_Pin rs;         // LOW: command.  HIGH: character.
-  HD44780_Pin en;     // activated by a HIGH pulse.
-  HD44780_Pin rw;         // LOW: write to LCD.  HIGH: read from LCD.
-  HD44780_Pin backlight;  // should be connected to base/gate of transistor/FET
-  HD44780_Pin dp[8];      // data pins
+  HD44780_Pin en;         // activated by a HIGH pulse.
+  HD44780_Pin rw;         // optional; LOW: write to LCD.  HIGH: read from LCD.
+  HD44780_Pin backlight;  // optional; should be connected to base/gate of transistor/FET
+  HD44780_Pin dp[8];      // data pins DP0..DP7; DP0..DP3 are optional if using 4-bit mode
 } HD44780_Pinout;
 
 typedef enum { HD44780_OK, HD44780_ERROR } HD44780_Result;
 typedef enum { HD44780_PIN_INPUT, HD44780_PIN_OUTPUT } HD44780_PinMode;
 typedef enum { HD44780_PIN_LOW, HD44780_PIN_HIGH } HD44780_PinState;
 
-/* Hardware-dependent pin control interface */
+/* Hardware-dependent pin control interface.
+ * configure() function is optional if you want to configure
+ * the display pins manually.
+ */
 typedef struct
 {
   HD44780_Result (*configure)(HD44780_Pin *pin, HD44780_PinMode mode);
@@ -142,15 +145,12 @@ HD44780_Result hd44780_write8bits(HD44780 *display, uint8_t value);
 HD44780_Result hd44780_write4bits(HD44780 *display, uint8_t value);
 HD44780_Result hd44780_pulse_enable_pin(HD44780 *display);
 
-#define HD44780_MAKE_8BITS(b0,b1,b2,b3,b4,b5,b6,b7) \
+#define HD44780_MAKE_5BITS(b4,b3,b2,b1,b0) \
     (((b0) & 1) | \
      ((b1) & 1) << 1 | \
      ((b2) & 1) << 2 | \
      ((b3) & 1) << 3 | \
-     ((b4) & 1) << 4 | \
-     ((b5) & 1) << 5 | \
-     ((b6) & 1) << 6 | \
-     ((b7) & 1) << 7)
+     ((b4) & 1) << 4)
 
 #ifdef __cplusplus
 }
