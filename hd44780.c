@@ -73,7 +73,8 @@ HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
   if (lines > 1)
     display->displayfunction |= HD44780_FLAG_2LINE;
 
-  display->numlines = lines;
+  display->columns_amount = cols;
+  display->lines_amount = lines;
   display->currline = 0;
 
   if (hd44780_config(display) != HD44780_OK)
@@ -85,19 +86,19 @@ HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
     /* This is according to the hitachi HD44780 datasheet figure 24, pg 46 */
 
     /* We start in 8bit mode, try to set 4 bit mode */
-    hd44780_write4bits(display, 0x03);
+    hd44780_write_bits(display, 0x03);
     display->hal.delay_microseconds(4500); // wait min 4.1ms
 
     /* Second try */
-    hd44780_write4bits(display, 0x03);
+    hd44780_write_bits(display, 0x03);
     display->hal.delay_microseconds(4500); // wait min 4.1ms
 
     /* Third go! */
-    hd44780_write4bits(display, 0x03);
+    hd44780_write_bits(display, 0x03);
     display->hal.delay_microseconds(150);
 
     /* Finally, set to 4-bit interface */
-    hd44780_write4bits(display, 0x02);
+    hd44780_write_bits(display, 0x02);
   }
   else
   {
@@ -165,7 +166,7 @@ HD44780_Result hd44780_clear(HD44780 *display)
   HD44780_RETURN_ASSERT(display->hal.delay_microseconds != NULL, HD44780_ERROR);
 
   hd44780_command(display, HD44780_CMD_CLEARDISPLAY); // clear display, set cursor position to zero
-  display->hal.delay_microseconds(2000); // this command takes a long time!
+  display->hal.delay_microseconds(3000); // this command takes a long time!
 
   return HD44780_OK;
 }
@@ -176,7 +177,7 @@ HD44780_Result hd44780_home(HD44780 *display)
   HD44780_RETURN_ASSERT(display->hal.delay_microseconds != NULL, HD44780_ERROR);
 
   hd44780_command(display, HD44780_CMD_RETURNHOME);  // set cursor position to zero
-  display->hal.delay_microseconds(2000);  // this command takes a long time!
+  display->hal.delay_microseconds(3000);  // this command takes a long time!
 
   return HD44780_OK;
 }
@@ -301,8 +302,8 @@ HD44780_Result hd44780_move_cursor(HD44780 *display, uint8_t column, uint8_t row
 
   static const int row_offsets[] = { 0x00, 0x40, 0x10, 0x50 };
 
-  if (row > display->numlines)
-    row = display->numlines - 1; // we count rows starting with zero
+  if (row > display->lines_amount)
+    row = display->lines_amount - 1; // we count rows starting with zero
 
   return hd44780_command(display, HD44780_CMD_SETDDRAMADDR | (column + row_offsets[row]));
 }
@@ -358,25 +359,25 @@ HD44780_Result hd44780_send(HD44780 *display, uint8_t value, uint8_t mode)
     display->hal.pins.write(&display->pinout.rw, HD44780_PIN_LOW);
 
   if (display->displayfunction & HD44780_FLAG_8BITMODE)
-    hd44780_write8bits(display, value);
+    hd44780_write_bits(display, value);
   else
   {
-    hd44780_write4bits(display, value >> 4);
-    hd44780_write4bits(display, value);
+    hd44780_write_bits(display, value >> 4);
+    hd44780_write_bits(display, value);
   }
 
   return HD44780_OK;
 }
 
-HD44780_Result hd44780_write8bits(HD44780 *display, uint8_t value)
+HD44780_Result hd44780_write_bits(HD44780 *display, uint8_t value)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->hal.pins.configure != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(display->hal.pins.write != NULL, HD44780_ERROR);
 
   for (unsigned i = 0; i < display->dp_amount; ++i)
   {
-    /* FIXME Use this if you implement reading which will use data pins as inputs:
-             display->hal.pins.configure(&display->pinout.dp[i]) */
+    display->hal.pins.configure(&display->pinout.dp[display->dp_offset + i], HD44780_PIN_OUTPUT);
     display->hal.pins.write(&display->pinout.dp[display->dp_offset + i], (value >> i) & 0x01);
   }
 
@@ -385,19 +386,25 @@ HD44780_Result hd44780_write8bits(HD44780 *display, uint8_t value)
   return HD44780_OK;
 }
 
-HD44780_Result hd44780_write4bits(HD44780 *display, uint8_t value)
+HD44780_Result hd44780_read_bits(HD44780 *display, uint8_t *value)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->hal.pins.configure != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(display->hal.pins.write != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(value != NULL, HD44780_ERROR);
+
+  uint8_t value_read = 0;
+  uint8_t bit = 0;
 
   for (unsigned i = 0; i < display->dp_amount; ++i)
   {
-    /* FIXME Use this if you implement reading which will use data pins as inputs:
-             display->hal.pins.configure(&display->pinout.dp[i]) */
-    display->hal.pins.write(&display->pinout.dp[display->dp_offset + i], (value >> i) & 0x01);
+    display->hal.pins.configure(&display->pinout.dp[display->dp_offset + i], HD44780_PIN_INPUT);
+    display->hal.pins.read(&display->pinout.dp[display->dp_offset + i], &bit);
+    value_read = (value_read << i) | (bit & 0x01);
   }
 
   hd44780_pulse_enable_pin(display);
+  *value = value_read;
 
   return HD44780_OK;
 }
@@ -444,7 +451,7 @@ HD44780_Result stm32f10x_default_pin_configure(HD44780_Pin *pin, HD44780_PinMode
     default: HD44780_HANG_ASSERT(0);
   }
 
-  gpio_config.GPIO_Pin = pin->gpio_pin;
+  gpio_config.GPIO_Pin = pin->pinmask;
   GPIO_Init(pin->gpio, &gpio_config);
 
   return HD44780_OK;
@@ -455,7 +462,19 @@ HD44780_Result stm32f10x_default_pin_write(HD44780_Pin *pin, HD44780_PinState va
   HD44780_RETURN_ASSERT(pin != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(pin->gpio != NULL, HD44780_ERROR);
 
-  GPIO_WriteBit(pin->gpio, pin->gpio_pin, (value == HD44780_PIN_LOW ? RESET : SET));
+  GPIO_WriteBit(pin->gpio, pin->pinmask, (value == HD44780_PIN_LOW ? RESET : SET));
+
+  return HD44780_OK;
+}
+
+HD44780_Result stm32f10x_default_pin_read(HD44780_Pin *pin, HD44780_PinState *value)
+{
+  HD44780_RETURN_ASSERT(pin != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(pin->gpio != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(value != NULL, HD44780_ERROR);
+
+  *value = (GPIO_ReadInputDataBit(pin->gpio, pin->pinmask) == RESET ?
+      HD44780_PIN_LOW : HD44780_PIN_HIGH);
 
   return HD44780_OK;
 }
@@ -464,7 +483,7 @@ const PinDriver STM32F10X_PinDriver =
 {
   stm32f10x_default_pin_configure,
   stm32f10x_default_pin_write,
-  // stm32f10x_default_pin_read
+  stm32f10x_default_pin_read
 };
 
 #endif /* HD44780_USE_STM32F10X */

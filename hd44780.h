@@ -49,11 +49,15 @@ extern "C" {
 #define HD44780_FLAG_5x10DOTS 0x04
 #define HD44780_FLAG_5x8DOTS 0x00
 
+typedef enum { HD44780_OK, HD44780_ERROR } HD44780_Result;
+typedef enum { HD44780_PIN_INPUT, HD44780_PIN_OUTPUT } HD44780_PinMode;
+typedef enum { HD44780_PIN_LOW, HD44780_PIN_HIGH } HD44780_PinState;
+
 /* STM32 pin definition for HD44780 */
 typedef struct
 {
   GPIO_TypeDef *gpio;
-  uint16_t gpio_pin;
+  uint16_t pinmask;
 } HD44780_Pin;
 
 /* HD44780 pinout description structure */
@@ -66,10 +70,6 @@ typedef struct
   HD44780_Pin dp[8];      // data pins DP0..DP7; DP0..DP3 are optional if using 4-bit mode
 } HD44780_Pinout;
 
-typedef enum { HD44780_OK, HD44780_ERROR } HD44780_Result;
-typedef enum { HD44780_PIN_INPUT, HD44780_PIN_OUTPUT } HD44780_PinMode;
-typedef enum { HD44780_PIN_LOW, HD44780_PIN_HIGH } HD44780_PinState;
-
 /* Hardware-dependent pin control interface.
  * configure() function is optional if you want to configure
  * the display pins manually.
@@ -78,6 +78,7 @@ typedef struct
 {
   HD44780_Result (*configure)(HD44780_Pin *pin, HD44780_PinMode mode);
   HD44780_Result (*write)(HD44780_Pin *pin, HD44780_PinState value);
+  HD44780_Result (*read)(HD44780_Pin *pin, HD44780_PinState *value);
 } PinDriver;
 
 #ifdef HD44780_USE_STM32F10X
@@ -100,7 +101,8 @@ typedef struct
   uint8_t displaycontrol;
   uint8_t displaymode;
   uint8_t initialized;
-  uint8_t numlines;
+  uint8_t columns_amount;
+  uint8_t lines_amount;
   uint8_t currline;
 
   HD44780_Pinout pinout;
@@ -141,8 +143,8 @@ HD44780_Result hd44780_autoscroll_off(HD44780 *display);
 HD44780_Result hd44780_config(HD44780 *display);
 HD44780_Result hd44780_command(HD44780 *display, uint8_t value);
 HD44780_Result hd44780_send(HD44780 *display, uint8_t value, uint8_t mode);
-HD44780_Result hd44780_write8bits(HD44780 *display, uint8_t value);
-HD44780_Result hd44780_write4bits(HD44780 *display, uint8_t value);
+HD44780_Result hd44780_write_bits(HD44780 *display, uint8_t value);
+HD44780_Result hd44780_read_bits(HD44780 *display, uint8_t *value);
 HD44780_Result hd44780_pulse_enable_pin(HD44780 *display);
 
 #define HD44780_MAKE_5BITS(b4,b3,b2,b1,b0) \
