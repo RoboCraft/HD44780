@@ -1,1 +1,5 @@
-Library for HD44780-based LCD, to be used with STM32 microcontrollers. This is the direct port of LiquidCrystalExt library for Arduino, from C++ class to plain C functions and structures. It's incomplete at the moment, though basic initializing and writing characters works.
+Cross-platform library for LCDs with HD44780-compatible controller.
+The library is designed to allow you to write drivers for your hardware
+platform without rewriting the library itself. There is only STM32F10x
+driver at the time. Originally, this was direct port of LiquidCrystalExt
+library for Arduino, from C++ classes to plain C functions and structures.

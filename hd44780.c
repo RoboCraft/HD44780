@@ -1,17 +1,15 @@
+#include <stdlib.h>
+#include <stdint.h>
 #include "hd44780.h"
-
-#ifdef HD44780_USE_STM32F10X
-#include <stm32f10x_rcc.h>
-#include <stm32f10x_gpio.h>
-#endif
-
-#include <stddef.h>
 
 
 void HD44780_HANG_ASSERT(int x)
 {
   if (!x)
-    do __NOP(); while (1);
+  {
+    volatile int i;
+    do ++i; while (1);
+  }
 }
 
 #ifndef NDEBUG
@@ -24,45 +22,38 @@ void HD44780_HANG_ASSERT(int x)
 
 
 HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
-    const HD44780_HAL *hal, const HD44780_Pinout *pinout,
-    uint8_t cols, uint8_t lines, uint8_t charsize)
+    const HD44780_HAL *hal, uint8_t cols, uint8_t lines, uint8_t charsize)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(hal != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(hal->pins.write != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(hal->pin_driver != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(hal->pin_driver->write != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(hal->delay_microseconds != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(pinout != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(cols > 0, HD44780_ERROR);
   HD44780_RETURN_ASSERT(lines > 0, HD44780_ERROR);
 
   display->hal = *hal;
-  display->pinout = *pinout;
 
-  if (display->hal.pins.configure != NULL)
+  if (display->hal.pin_driver->configure != NULL)
   {
-    display->hal.pins.configure(&display->pinout.rs, HD44780_PIN_OUTPUT);
-    display->hal.pins.configure(&display->pinout.en, HD44780_PIN_OUTPUT);
-
-    if (display->pinout.rw.gpio != NULL)
-      display->hal.pins.configure(&display->pinout.rw, HD44780_PIN_OUTPUT);
-
-    if (display->pinout.backlight.gpio != NULL)
-      display->hal.pins.configure(&display->pinout.backlight, HD44780_PIN_OUTPUT);
+    display->hal.pin_driver->configure(display->hal.pin_driver, HD44780_PIN_RS, HD44780_PIN_OUTPUT);
+    display->hal.pin_driver->configure(display->hal.pin_driver, HD44780_PIN_ENABLE, HD44780_PIN_OUTPUT);
+    display->hal.pin_driver->configure(display->hal.pin_driver, HD44780_PIN_RW, HD44780_PIN_OUTPUT);
+    display->hal.pin_driver->configure(display->hal.pin_driver, HD44780_PIN_BACKLIGHT, HD44780_PIN_OUTPUT);
   }
 
-  if (display->pinout.backlight.gpio != NULL)
-    display->hal.pins.write(&display->pinout.backlight, HD44780_PIN_LOW);
+  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_BACKLIGHT, HD44780_PIN_LOW);
 
   if (mode == HD44780_MODE_4BIT)
   {
     display->displayfunction = HD44780_FLAG_4BITMODE | HD44780_FLAG_1LINE | HD44780_FLAG_5x8DOTS;
-    display->dp_offset = 4;
+    display->dp_first = HD44780_PIN_DP4;
     display->dp_amount = 4;
   }
   else
   {
     display->displayfunction = HD44780_FLAG_8BITMODE | HD44780_FLAG_1LINE | HD44780_FLAG_5x8DOTS;
-    display->dp_offset = 0;
+    display->dp_first = HD44780_PIN_DP0;
     display->dp_amount = 8;
   }
 
@@ -312,14 +303,14 @@ HD44780_Result hd44780_config(HD44780 *display)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(display->hal.delay_microseconds != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.pins.write != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->hal.pin_driver->write != NULL, HD44780_ERROR);
 
   for (unsigned i = 0; i < display->dp_amount; ++i)
   {
-    if (display->hal.pins.configure != NULL)
-      display->hal.pins.configure(&display->pinout.dp[display->dp_offset + i], HD44780_PIN_OUTPUT);
+    if (display->hal.pin_driver->configure != NULL)
+      display->hal.pin_driver->configure(display->hal.pin_driver, display->dp_first + i, HD44780_PIN_OUTPUT);
 
-    display->hal.pins.write(&display->pinout.dp[display->dp_offset + i], HD44780_PIN_LOW);
+    display->hal.pin_driver->write(display->hal.pin_driver, display->dp_first + i, HD44780_PIN_LOW);
   }
 
   /* SEE PAGE 45/46 FOR INITIALIZATION SPECIFICATION!
@@ -329,11 +320,9 @@ HD44780_Result hd44780_config(HD44780 *display)
   display->hal.delay_microseconds(50000);
 
   /* Now we pull both RS and R/W low to begin commands */
-  display->hal.pins.write(&display->pinout.rs, HD44780_PIN_LOW);
-  display->hal.pins.write(&display->pinout.en, HD44780_PIN_LOW);
-
-  if (display->pinout.rw.gpio != NULL)
-    display->hal.pins.write(&display->pinout.rw, HD44780_PIN_LOW);
+  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_RS, HD44780_PIN_LOW);
+  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_ENABLE, HD44780_PIN_LOW);
+  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_RW, HD44780_PIN_LOW);
 
   return HD44780_OK;
 }
@@ -347,16 +336,13 @@ HD44780_Result hd44780_command(HD44780 *display, uint8_t value)
   return HD44780_OK;
 }
 
-HD44780_Result hd44780_send(HD44780 *display, uint8_t value, uint8_t mode)
+HD44780_Result hd44780_send(HD44780 *display, uint8_t value, HD44780_PinState rs_mode)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.pins.write != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->hal.pin_driver->write != NULL, HD44780_ERROR);
 
-  display->hal.pins.write(&display->pinout.rs, mode);
-
-  /* If there is a RW pin indicated, set it low to write */
-  if (display->pinout.rw.gpio != NULL)
-    display->hal.pins.write(&display->pinout.rw, HD44780_PIN_LOW);
+  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_RS, rs_mode);
+  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_RW, HD44780_PIN_LOW);
 
   if (display->displayfunction & HD44780_FLAG_8BITMODE)
     hd44780_write_bits(display, value);
@@ -372,13 +358,13 @@ HD44780_Result hd44780_send(HD44780 *display, uint8_t value, uint8_t mode)
 HD44780_Result hd44780_write_bits(HD44780 *display, uint8_t value)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.pins.configure != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.pins.write != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->hal.pin_driver->configure != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->hal.pin_driver->write != NULL, HD44780_ERROR);
 
   for (unsigned i = 0; i < display->dp_amount; ++i)
   {
-    display->hal.pins.configure(&display->pinout.dp[display->dp_offset + i], HD44780_PIN_OUTPUT);
-    display->hal.pins.write(&display->pinout.dp[display->dp_offset + i], (value >> i) & 0x01);
+    display->hal.pin_driver->configure(display->hal.pin_driver, display->dp_first + i, HD44780_PIN_OUTPUT);
+    display->hal.pin_driver->write(display->hal.pin_driver, display->dp_first + i, (value >> i) & 0x01);
   }
 
   hd44780_pulse_enable_pin(display);
@@ -389,8 +375,8 @@ HD44780_Result hd44780_write_bits(HD44780 *display, uint8_t value)
 HD44780_Result hd44780_read_bits(HD44780 *display, uint8_t *value)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.pins.configure != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.pins.write != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->hal.pin_driver->configure != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->hal.pin_driver->write != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(value != NULL, HD44780_ERROR);
 
   uint8_t value_read = 0;
@@ -398,8 +384,8 @@ HD44780_Result hd44780_read_bits(HD44780 *display, uint8_t *value)
 
   for (unsigned i = 0; i < display->dp_amount; ++i)
   {
-    display->hal.pins.configure(&display->pinout.dp[display->dp_offset + i], HD44780_PIN_INPUT);
-    display->hal.pins.read(&display->pinout.dp[display->dp_offset + i], &bit);
+    display->hal.pin_driver->configure(display->hal.pin_driver, display->dp_first + i, HD44780_PIN_INPUT);
+    display->hal.pin_driver->read(display->hal.pin_driver, display->dp_first + i, &bit);
     value_read = (value_read << i) | (bit & 0x01);
   }
 
@@ -412,78 +398,15 @@ HD44780_Result hd44780_read_bits(HD44780 *display, uint8_t *value)
 HD44780_Result hd44780_pulse_enable_pin(HD44780 *display)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.pins.write != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->hal.pin_driver->write != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(display->hal.delay_microseconds != NULL, HD44780_ERROR);
 
-  display->hal.pins.write(&display->pinout.en, HD44780_PIN_LOW);
+  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_ENABLE, HD44780_PIN_LOW);
   display->hal.delay_microseconds(1);
-  display->hal.pins.write(&display->pinout.en, HD44780_PIN_HIGH);
+  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_ENABLE, HD44780_PIN_HIGH);
   display->hal.delay_microseconds(1); // enable pulse must be >450ns
-  display->hal.pins.write(&display->pinout.en, HD44780_PIN_LOW);
+  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_ENABLE, HD44780_PIN_LOW);
   display->hal.delay_microseconds(100); // commands need > 37us to settle
 
   return HD44780_OK;
 }
-
-
-/***** PinDriver for STM32F10X *****/
-
-#ifdef HD44780_USE_STM32F10X
-
-HD44780_Result stm32f10x_default_pin_configure(HD44780_Pin *pin, HD44780_PinMode mode)
-{
-  HD44780_RETURN_ASSERT(pin != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(pin->gpio != NULL, HD44780_ERROR);
-
-  GPIO_InitTypeDef gpio_config;
-  GPIO_StructInit(&gpio_config);
-
-  switch (mode)
-  {
-    case HD44780_PIN_OUTPUT:
-      gpio_config.GPIO_Mode = GPIO_Mode_Out_PP;
-      break;
-
-    case HD44780_PIN_INPUT:
-      gpio_config.GPIO_Mode = GPIO_Mode_IN_FLOATING;
-      break;
-
-    default: HD44780_HANG_ASSERT(0);
-  }
-
-  gpio_config.GPIO_Pin = pin->pinmask;
-  GPIO_Init(pin->gpio, &gpio_config);
-
-  return HD44780_OK;
-}
-
-HD44780_Result stm32f10x_default_pin_write(HD44780_Pin *pin, HD44780_PinState value)
-{
-  HD44780_RETURN_ASSERT(pin != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(pin->gpio != NULL, HD44780_ERROR);
-
-  GPIO_WriteBit(pin->gpio, pin->pinmask, (value == HD44780_PIN_LOW ? RESET : SET));
-
-  return HD44780_OK;
-}
-
-HD44780_Result stm32f10x_default_pin_read(HD44780_Pin *pin, HD44780_PinState *value)
-{
-  HD44780_RETURN_ASSERT(pin != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(pin->gpio != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(value != NULL, HD44780_ERROR);
-
-  *value = (GPIO_ReadInputDataBit(pin->gpio, pin->pinmask) == RESET ?
-      HD44780_PIN_LOW : HD44780_PIN_HIGH);
-
-  return HD44780_OK;
-}
-
-const PinDriver STM32F10X_PinDriver =
-{
-  stm32f10x_default_pin_configure,
-  stm32f10x_default_pin_write,
-  stm32f10x_default_pin_read
-};
-
-#endif /* HD44780_USE_STM32F10X */
