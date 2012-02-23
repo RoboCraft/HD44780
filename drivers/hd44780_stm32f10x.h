@@ -1,5 +1,5 @@
-#ifndef HC44780_STM32F10X_H_
-#define HC44780_STM32F10X_H_
+#ifndef HD44780_STM32F10X_H_
+#define HD44780_STM32F10X_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,22 +21,17 @@ typedef struct
   HD44780_STM32F10x_Pin pins[HD44780_PIN_AMOUNT];
 } HD44780_STM32F10x_Pinout;
 
-typedef enum
-{
-  HD44780_STM32F10X_ASSERT_NULL = 0x01
-} HD44780_STM32F10x_PinDriverOptions;
-
 typedef struct
 {
-  HD44780_PinDriver generic_driver;
+  HD44780_GPIO_Interface interface;
   HD44780_STM32F10x_Pinout pinout;
-  HD44780_STM32F10x_PinDriverOptions flags;
-} HD44780_STM32F10x_PinDriver;
+  HD44780_AssertFn assert_failure_handler;
+} HD44780_STM32F10x_GPIO_Driver;
 
-extern const HD44780_PinDriver HD44780_STM32F10X_DEFAULT_PINDRIVER;
+extern const HD44780_GPIO_Interface HD44780_STM32F10X_PINDRIVER_INTERFACE;
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* HC44780_STM32F10X_H_ */
+#endif /* HD44780_STM32F10X_H_ */

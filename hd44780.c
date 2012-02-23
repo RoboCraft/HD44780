@@ -3,46 +3,66 @@
 #include "hd44780.h"
 
 
-void HD44780_HANG_ASSERT(int x)
-{
-  if (!x)
-  {
-    volatile int i;
-    do ++i; while (1);
-  }
-}
-
 #ifndef NDEBUG
+  #define HD44780_ASSERT(x) \
+    { \
+      if (!(x)) \
+      { \
+        if (display->cfg.assert_failure_handler != NULL) \
+          display->cfg.assert_failure_handler(__FILE__, __LINE__); \
+      } \
+    }
+
   #define HD44780_RETURN_ASSERT(x,ret) \
-    HD44780_HANG_ASSERT(x)
+    do { \
+      int condition = (x); \
+      HD44780_ASSERT(condition) \
+      if (!condition) \
+        return (ret); \
+    } while (0)
 #else
-  #define HD44780_RETURN_ASSERT(x,ret) \
-    do { if (!(x)) return (ret); while (1); } while (0)
+  #define HD44780_ASSERT(x)
+  #define HD44780_RETURN_ASSERT(x,ret)
 #endif
+
+#define HD44780_RETURN_IF_ERROR(result) \
+  do {\
+    HD44780_Result r = (result); \
+    if (r != HD44780_OK) \
+      return r; \
+  } while (0)
 
 
 HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
-    const HD44780_HAL *hal, uint8_t cols, uint8_t lines, uint8_t charsize)
+    const HD44780_Config *config, uint8_t cols, uint8_t lines, uint8_t charsize)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(hal != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(hal->pin_driver != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(hal->pin_driver->write != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(hal->delay_microseconds != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(config != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(config->gpios != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(config->gpios->write != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(config->delay_microseconds != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(cols > 0, HD44780_ERROR);
   HD44780_RETURN_ASSERT(lines > 0, HD44780_ERROR);
 
-  display->hal = *hal;
+  display->cfg = *config;
 
-  if (display->hal.pin_driver->configure != NULL)
+  HD44780_GPIO_Interface *const gpios = display->cfg.gpios;
+  HD44780_DelayMicrosecondsFn delay_microseconds = display->cfg.delay_microseconds;
+
+  if (gpios->configure != NULL)
   {
-    display->hal.pin_driver->configure(display->hal.pin_driver, HD44780_PIN_RS, HD44780_PIN_OUTPUT);
-    display->hal.pin_driver->configure(display->hal.pin_driver, HD44780_PIN_ENABLE, HD44780_PIN_OUTPUT);
-    display->hal.pin_driver->configure(display->hal.pin_driver, HD44780_PIN_RW, HD44780_PIN_OUTPUT);
-    display->hal.pin_driver->configure(display->hal.pin_driver, HD44780_PIN_BACKLIGHT, HD44780_PIN_OUTPUT);
+    HD44780_RETURN_IF_ERROR(gpios->configure(gpios, HD44780_PIN_RS, HD44780_PIN_OUTPUT));
+    HD44780_RETURN_IF_ERROR(gpios->configure(gpios, HD44780_PIN_ENABLE, HD44780_PIN_OUTPUT));
+
+    if (display->cfg.options & HD44780_OPT_USE_RW)
+      HD44780_RETURN_IF_ERROR(gpios->configure(gpios, HD44780_PIN_RW, HD44780_PIN_OUTPUT));
+
+    if (display->cfg.options & HD44780_OPT_USE_BACKLIGHT)
+      HD44780_RETURN_IF_ERROR(gpios->configure(gpios, HD44780_PIN_BACKLIGHT, HD44780_PIN_OUTPUT));
   }
 
-  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_BACKLIGHT, HD44780_PIN_LOW);
+  if (display->cfg.options & HD44780_OPT_USE_BACKLIGHT)
+    HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_BACKLIGHT, HD44780_PIN_LOW));
 
   if (mode == HD44780_MODE_4BIT)
   {
@@ -77,51 +97,49 @@ HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
     /* This is according to the hitachi HD44780 datasheet figure 24, pg 46 */
 
     /* We start in 8bit mode, try to set 4 bit mode */
-    hd44780_write_bits(display, 0x03);
-    display->hal.delay_microseconds(4500); // wait min 4.1ms
+    HD44780_RETURN_IF_ERROR(hd44780_write_bits(display, 0x03));
+    delay_microseconds(4500); // wait min 4.1ms
 
     /* Second try */
-    hd44780_write_bits(display, 0x03);
-    display->hal.delay_microseconds(4500); // wait min 4.1ms
+    HD44780_RETURN_IF_ERROR(hd44780_write_bits(display, 0x03));
+    delay_microseconds(4500); // wait min 4.1ms
 
     /* Third go! */
-    hd44780_write_bits(display, 0x03);
-    display->hal.delay_microseconds(150);
+    HD44780_RETURN_IF_ERROR(hd44780_write_bits(display, 0x03));
+    delay_microseconds(150);
 
     /* Finally, set to 4-bit interface */
-    hd44780_write_bits(display, 0x02);
+    HD44780_RETURN_IF_ERROR(hd44780_write_bits(display, 0x02));
   }
   else
   {
     /* This is according to the hitachi HD44780 datasheet page 45 figure 23 */
 
     /* Send function set command sequence */
-    hd44780_command(display, HD44780_CMD_FUNCTIONSET | display->displayfunction);
-    display->hal.delay_microseconds(4500);  // wait more than 4.1ms
+    HD44780_RETURN_IF_ERROR(hd44780_command(display, HD44780_CMD_FUNCTIONSET | display->displayfunction));
+    delay_microseconds(4500);  // wait more than 4.1ms
 
     /* Second try */
-    hd44780_command(display, HD44780_CMD_FUNCTIONSET | display->displayfunction);
-    display->hal.delay_microseconds(150);
+    HD44780_RETURN_IF_ERROR(hd44780_command(display, HD44780_CMD_FUNCTIONSET | display->displayfunction));
+    delay_microseconds(150);
 
     /* Third go */
-    hd44780_command(display, HD44780_CMD_FUNCTIONSET | display->displayfunction);
+    HD44780_RETURN_IF_ERROR(hd44780_command(display, HD44780_CMD_FUNCTIONSET | display->displayfunction));
   }
 
   /* Finally, set # lines, font size, etc. */
-  hd44780_command(display, HD44780_CMD_FUNCTIONSET | display->displayfunction);
+  HD44780_RETURN_IF_ERROR(hd44780_command(display, HD44780_CMD_FUNCTIONSET | display->displayfunction));
 
   /* Turn the display on with no cursor or blinking default */
   display->displaycontrol = HD44780_FLAG_DISPLAYON | HD44780_FLAG_CURSOROFF | HD44780_FLAG_BLINKOFF;
-  hd44780_display_on(display);
+  HD44780_RETURN_IF_ERROR(hd44780_display_on(display));
 
   /* Clear it off */
-  hd44780_clear(display);
-
+  HD44780_RETURN_IF_ERROR(hd44780_clear(display));
   /* Initialize to default text direction (for romance languages) */
   display->displaymode = HD44780_FLAG_ENTRYLEFT | HD44780_FLAG_ENTRYSHIFTDECREMENT;
-
   /* Set the entry mode */
-  hd44780_command(display, HD44780_CMD_ENTRYMODESET | display->displaymode);
+  HD44780_RETURN_IF_ERROR(hd44780_command(display, HD44780_CMD_ENTRYMODESET | display->displaymode));
 
   return HD44780_OK;
 }
@@ -129,10 +147,7 @@ HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
 HD44780_Result hd44780_write_byte(HD44780 *display, uint8_t value)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-
-  hd44780_send(display, value, HD44780_PIN_HIGH);
-
-  return HD44780_OK;
+  return hd44780_send(display, value, HD44780_PIN_HIGH);
 }
 
 HD44780_Result hd44780_write_char(HD44780 *display, char c)
@@ -146,7 +161,7 @@ HD44780_Result hd44780_write_string(HD44780 *display, const char *s)
   HD44780_RETURN_ASSERT(s != NULL, HD44780_ERROR);
 
   while (*s)
-    hd44780_write_char(display, *s++);
+    HD44780_RETURN_IF_ERROR(hd44780_write_char(display, *s++));
 
   return HD44780_OK;
 }
@@ -154,10 +169,10 @@ HD44780_Result hd44780_write_string(HD44780 *display, const char *s)
 HD44780_Result hd44780_clear(HD44780 *display)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.delay_microseconds != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.delay_microseconds != NULL, HD44780_ERROR);
 
-  hd44780_command(display, HD44780_CMD_CLEARDISPLAY); // clear display, set cursor position to zero
-  display->hal.delay_microseconds(3000); // this command takes a long time!
+  HD44780_RETURN_IF_ERROR(hd44780_command(display, HD44780_CMD_CLEARDISPLAY)); // clear display, set cursor position to zero
+  display->cfg.delay_microseconds(3000); // this command takes a long time!
 
   return HD44780_OK;
 }
@@ -165,12 +180,69 @@ HD44780_Result hd44780_clear(HD44780 *display)
 HD44780_Result hd44780_home(HD44780 *display)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.delay_microseconds != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.delay_microseconds != NULL, HD44780_ERROR);
 
-  hd44780_command(display, HD44780_CMD_RETURNHOME);  // set cursor position to zero
-  display->hal.delay_microseconds(3000);  // this command takes a long time!
+  HD44780_RETURN_IF_ERROR(hd44780_command(display, HD44780_CMD_RETURNHOME));
+  display->cfg.delay_microseconds(3000);  // this command takes a long time!
 
   return HD44780_OK;
+}
+
+HD44780_Result hd44780_scroll_left(HD44780 *display)
+{
+  HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
+  return hd44780_command(display,
+      HD44780_CMD_CURSORSHIFT | HD44780_FLAG_DISPLAYMOVE | HD44780_FLAG_MOVELEFT);
+}
+
+HD44780_Result hd44780_scroll_right(HD44780 *display)
+{
+  HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
+  return hd44780_command(display,
+      HD44780_CMD_CURSORSHIFT | HD44780_FLAG_DISPLAYMOVE | HD44780_FLAG_MOVERIGHT);
+}
+
+HD44780_Result hd44780_left_to_right(HD44780 *display)
+{
+  HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
+
+  display->displaymode |= HD44780_FLAG_ENTRYLEFT;
+  return hd44780_command(display, HD44780_CMD_ENTRYMODESET | display->displaymode);
+}
+
+HD44780_Result hd44780_right_to_left(HD44780 *display)
+{
+  HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
+
+  display->displaymode &= ~HD44780_FLAG_ENTRYLEFT;
+  return hd44780_command(display, HD44780_CMD_ENTRYMODESET | display->displaymode);
+}
+
+/* FIXME moves the cursor out of screen */
+HD44780_Result hd44780_create_char(HD44780 *display, uint8_t location, const uint8_t *charmap)
+{
+  HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(charmap != NULL, HD44780_ERROR);
+
+  location &= 0x7; // we only have 8 locations 0-7
+  HD44780_RETURN_IF_ERROR(hd44780_command(display, HD44780_CMD_SETCGRAMADDR | (location << 3)));
+
+  for (unsigned i = 0; i < 8; ++i)
+    HD44780_RETURN_IF_ERROR(hd44780_write_byte(display, charmap[i]));
+
+  return HD44780_OK;
+}
+
+HD44780_Result hd44780_move_cursor(HD44780 *display, uint8_t column, uint8_t row)
+{
+  HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
+
+  static const int row_offsets[] = { 0x00, 0x40, 0x10, 0x50 };
+
+  if (row > display->lines_amount)
+    row = display->lines_amount - 1; // we count rows starting with zero
+
+  return hd44780_command(display, HD44780_CMD_SETDDRAMADDR | (column + row_offsets[row]));
 }
 
 HD44780_Result hd44780_display_on(HD44780 *display)
@@ -237,92 +309,53 @@ HD44780_Result hd44780_autoscroll_off(HD44780 *display)
   return hd44780_command(display, HD44780_CMD_ENTRYMODESET | display->displaymode);
 }
 
-HD44780_Result hd44780_scroll_left(HD44780 *display)
+HD44780_Result hd44780_backlight_on(HD44780 *display)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  return hd44780_command(display,
-      HD44780_CMD_CURSORSHIFT | HD44780_FLAG_DISPLAYMOVE | HD44780_FLAG_MOVELEFT);
+  HD44780_RETURN_ASSERT(display->cfg.gpios != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.gpios->write != NULL, HD44780_ERROR);
+
+  return display->cfg.gpios->write(display->cfg.gpios, HD44780_PIN_BACKLIGHT, HD44780_PIN_HIGH);
 }
 
-HD44780_Result hd44780_scroll_right(HD44780 *display)
+HD44780_Result hd44780_backlight_off(HD44780 *display)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  return hd44780_command(display,
-      HD44780_CMD_CURSORSHIFT | HD44780_FLAG_DISPLAYMOVE | HD44780_FLAG_MOVERIGHT);
-}
+  HD44780_RETURN_ASSERT(display->cfg.gpios != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.gpios->write != NULL, HD44780_ERROR);
 
-HD44780_Result hd44780_left_to_right(HD44780 *display)
-{
-  HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-
-  display->displaymode |= HD44780_FLAG_ENTRYLEFT;
-  return hd44780_command(display, HD44780_CMD_ENTRYMODESET | display->displaymode);
-}
-
-HD44780_Result hd44780_right_to_left(HD44780 *display)
-{
-  HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-
-  display->displaymode &= ~HD44780_FLAG_ENTRYLEFT;
-  return hd44780_command(display, HD44780_CMD_ENTRYMODESET | display->displaymode);
-}
-
-/* FIXME moves the cursor out of screen */
-HD44780_Result hd44780_create_char(HD44780 *display, uint8_t location, const uint8_t *charmap)
-{
-  HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(charmap != NULL, HD44780_ERROR);
-
-  location &= 0x7; // we only have 8 locations 0-7
-
-  if (hd44780_command(display, HD44780_CMD_SETCGRAMADDR | (location << 3)) != HD44780_OK)
-    return HD44780_ERROR;
-
-  for (unsigned i = 0; i < 8; ++i)
-  {
-    if (hd44780_write_byte(display, charmap[i]) != HD44780_OK)
-      return HD44780_ERROR;
-  }
-
-  return HD44780_OK;
-}
-
-HD44780_Result hd44780_move_cursor(HD44780 *display, uint8_t column, uint8_t row)
-{
-  HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-
-  static const int row_offsets[] = { 0x00, 0x40, 0x10, 0x50 };
-
-  if (row > display->lines_amount)
-    row = display->lines_amount - 1; // we count rows starting with zero
-
-  return hd44780_command(display, HD44780_CMD_SETDDRAMADDR | (column + row_offsets[row]));
+  return display->cfg.gpios->write(display->cfg.gpios, HD44780_PIN_BACKLIGHT, HD44780_PIN_LOW);
 }
 
 HD44780_Result hd44780_config(HD44780 *display)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.delay_microseconds != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.pin_driver->write != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.delay_microseconds != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.gpios != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.gpios->write != NULL, HD44780_ERROR);
+
+  HD44780_GPIO_Interface *const gpios = display->cfg.gpios;
 
   for (unsigned i = 0; i < display->dp_amount; ++i)
   {
-    if (display->hal.pin_driver->configure != NULL)
-      display->hal.pin_driver->configure(display->hal.pin_driver, display->dp_first + i, HD44780_PIN_OUTPUT);
+    if (gpios->configure != NULL)
+      HD44780_RETURN_IF_ERROR(gpios->configure(gpios, display->dp_first + i, HD44780_PIN_OUTPUT));
 
-    display->hal.pin_driver->write(display->hal.pin_driver, display->dp_first + i, HD44780_PIN_LOW);
+    HD44780_RETURN_IF_ERROR(gpios->write(gpios, display->dp_first + i, HD44780_PIN_LOW));
   }
 
   /* SEE PAGE 45/46 FOR INITIALIZATION SPECIFICATION!
    * according to datasheet, we need at least 40ms after power rises above 2.7V
    * before sending commands.
    */
-  display->hal.delay_microseconds(50000);
+  display->cfg.delay_microseconds(50000);
 
   /* Now we pull both RS and R/W low to begin commands */
-  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_RS, HD44780_PIN_LOW);
-  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_ENABLE, HD44780_PIN_LOW);
-  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_RW, HD44780_PIN_LOW);
+  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_RS, HD44780_PIN_LOW));
+  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_ENABLE, HD44780_PIN_LOW));
+
+  if (display->cfg.options & HD44780_OPT_USE_RW)
+    HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_RW, HD44780_PIN_LOW));
 
   return HD44780_OK;
 }
@@ -330,26 +363,28 @@ HD44780_Result hd44780_config(HD44780 *display)
 HD44780_Result hd44780_command(HD44780 *display, uint8_t value)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-
-  hd44780_send(display, value, HD44780_PIN_LOW);
-
-  return HD44780_OK;
+  return hd44780_send(display, value, HD44780_PIN_LOW);
 }
 
 HD44780_Result hd44780_send(HD44780 *display, uint8_t value, HD44780_PinState rs_mode)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.pin_driver->write != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.gpios != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.gpios->write != NULL, HD44780_ERROR);
 
-  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_RS, rs_mode);
-  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_RW, HD44780_PIN_LOW);
+  HD44780_GPIO_Interface *const gpios = display->cfg.gpios;
+
+  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_RS, rs_mode));
+
+  if (display->cfg.options & HD44780_OPT_USE_RW)
+    HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_RW, HD44780_PIN_LOW));
 
   if (display->displayfunction & HD44780_FLAG_8BITMODE)
-    hd44780_write_bits(display, value);
+    HD44780_RETURN_IF_ERROR(hd44780_write_bits(display, value));
   else
   {
-    hd44780_write_bits(display, value >> 4);
-    hd44780_write_bits(display, value);
+    HD44780_RETURN_IF_ERROR(hd44780_write_bits(display, value >> 4));
+    HD44780_RETURN_IF_ERROR(hd44780_write_bits(display, value));
   }
 
   return HD44780_OK;
@@ -358,16 +393,19 @@ HD44780_Result hd44780_send(HD44780 *display, uint8_t value, HD44780_PinState rs
 HD44780_Result hd44780_write_bits(HD44780 *display, uint8_t value)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.pin_driver->configure != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.pin_driver->write != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.gpios != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.gpios->configure != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.gpios->write != NULL, HD44780_ERROR);
+
+  HD44780_GPIO_Interface *const gpios = display->cfg.gpios;
 
   for (unsigned i = 0; i < display->dp_amount; ++i)
   {
-    display->hal.pin_driver->configure(display->hal.pin_driver, display->dp_first + i, HD44780_PIN_OUTPUT);
-    display->hal.pin_driver->write(display->hal.pin_driver, display->dp_first + i, (value >> i) & 0x01);
+    HD44780_RETURN_IF_ERROR(gpios->configure(gpios, display->dp_first + i, HD44780_PIN_OUTPUT));
+    HD44780_RETURN_IF_ERROR(gpios->write(gpios, display->dp_first + i, (value >> i) & 0x01));
   }
 
-  hd44780_pulse_enable_pin(display);
+  HD44780_RETURN_IF_ERROR(hd44780_pulse_enable_pin(display));
 
   return HD44780_OK;
 }
@@ -375,21 +413,27 @@ HD44780_Result hd44780_write_bits(HD44780 *display, uint8_t value)
 HD44780_Result hd44780_read_bits(HD44780 *display, uint8_t *value)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.pin_driver->configure != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.pin_driver->write != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.gpios != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.gpios->configure != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.gpios->write != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(value != NULL, HD44780_ERROR);
+
+  HD44780_GPIO_Interface *const gpios = display->cfg.gpios;
+
+  if (display->cfg.options & HD44780_OPT_USE_RW)
+    HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_RW, HD44780_PIN_LOW));
 
   uint8_t value_read = 0;
   uint8_t bit = 0;
 
   for (unsigned i = 0; i < display->dp_amount; ++i)
   {
-    display->hal.pin_driver->configure(display->hal.pin_driver, display->dp_first + i, HD44780_PIN_INPUT);
-    display->hal.pin_driver->read(display->hal.pin_driver, display->dp_first + i, &bit);
+    HD44780_RETURN_IF_ERROR(gpios->configure(gpios, display->dp_first + i, HD44780_PIN_INPUT));
+    HD44780_RETURN_IF_ERROR(gpios->read(gpios, display->dp_first + i, &bit));
     value_read = (value_read << i) | (bit & 0x01);
   }
 
-  hd44780_pulse_enable_pin(display);
+  HD44780_RETURN_IF_ERROR(hd44780_pulse_enable_pin(display));
   *value = value_read;
 
   return HD44780_OK;
@@ -398,15 +442,21 @@ HD44780_Result hd44780_read_bits(HD44780 *display, uint8_t *value)
 HD44780_Result hd44780_pulse_enable_pin(HD44780 *display)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.pin_driver->write != NULL, HD44780_ERROR);
-  HD44780_RETURN_ASSERT(display->hal.delay_microseconds != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.gpios != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.gpios->write != NULL, HD44780_ERROR);
+  HD44780_RETURN_ASSERT(display->cfg.delay_microseconds != NULL, HD44780_ERROR);
 
-  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_ENABLE, HD44780_PIN_LOW);
-  display->hal.delay_microseconds(1);
-  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_ENABLE, HD44780_PIN_HIGH);
-  display->hal.delay_microseconds(1); // enable pulse must be >450ns
-  display->hal.pin_driver->write(display->hal.pin_driver, HD44780_PIN_ENABLE, HD44780_PIN_LOW);
-  display->hal.delay_microseconds(100); // commands need > 37us to settle
+  HD44780_GPIO_Interface *const gpios = display->cfg.gpios;
+  HD44780_DelayMicrosecondsFn delay_microseconds = display->cfg.delay_microseconds;
+
+  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_ENABLE, HD44780_PIN_LOW));
+  delay_microseconds(1);
+
+  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_ENABLE, HD44780_PIN_HIGH));
+  delay_microseconds(1); // enable pulse must be >450ns
+
+  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_ENABLE, HD44780_PIN_LOW));
+  delay_microseconds(100); // commands need > 37us to settle
 
   return HD44780_OK;
 }

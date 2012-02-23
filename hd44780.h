@@ -73,27 +73,38 @@ typedef enum
  * configure() function is optional if you want to configure
  * the display pins manually.
  */
-struct HD44780_PinDriver_Struct;
-typedef struct HD44780_PinDriver_Struct HD44780_PinDriver;
+struct HD44780_GPIO_Interface_Struct;
+typedef struct HD44780_GPIO_Interface_Struct HD44780_GPIO_Interface;
 
-struct HD44780_PinDriver_Struct
+struct HD44780_GPIO_Interface_Struct
 {
-  HD44780_Result (*configure)(HD44780_PinDriver *driver, HD44780_Pin pin, HD44780_PinMode mode);
-  HD44780_Result (*write)(HD44780_PinDriver *driver, HD44780_Pin pin, HD44780_PinState value);
-  HD44780_Result (*read)(HD44780_PinDriver *driver, HD44780_Pin pin, HD44780_PinState *value);
+  HD44780_Result (*configure)(HD44780_GPIO_Interface *driver, HD44780_Pin pin, HD44780_PinMode mode);
+  HD44780_Result (*write)(HD44780_GPIO_Interface *driver, HD44780_Pin pin, HD44780_PinState value);
+  HD44780_Result (*read)(HD44780_GPIO_Interface *driver, HD44780_Pin pin, HD44780_PinState *value);
 };
+
+typedef void (*HD44780_AssertFn)(const char *filename, unsigned line);
+typedef void (*HD44780_DelayMicrosecondsFn)(uint16_t us);
+
+typedef enum
+{
+  HD44780_OPT_USE_RW = 1 << 0,
+  HD44780_OPT_USE_BACKLIGHT = 1 << 1,
+} HD44780_Options;
 
 /* Hardware abstraction layer */
 typedef struct
 {
-  HD44780_PinDriver *pin_driver;
-  void (*delay_microseconds)(uint16_t us);
-} HD44780_HAL;
+  HD44780_GPIO_Interface *gpios;
+  HD44780_DelayMicrosecondsFn delay_microseconds;
+  HD44780_AssertFn assert_failure_handler;
+  HD44780_Options options;
+} HD44780_Config;
 
 /* HD44780 control structure */
 typedef struct
 {
-  HD44780_HAL hal;
+  HD44780_Config cfg;
 
   uint8_t displayfunction;
   uint8_t displaycontrol;
@@ -112,7 +123,7 @@ typedef enum { HD44780_MODE_4BIT, HD44780_MODE_8BIT } HD44780_Mode;
 /***** User API *****/
 
 HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
-    const HD44780_HAL *hal, uint8_t cols, uint8_t lines, uint8_t charsize);
+    const HD44780_Config *config, uint8_t cols, uint8_t lines, uint8_t charsize);
 HD44780_Result hd44780_write_byte(HD44780 *display, uint8_t value);
 HD44780_Result hd44780_write_char(HD44780 *display, char c);
 HD44780_Result hd44780_write_string(HD44780 *display, const char *s);
@@ -133,6 +144,8 @@ HD44780_Result hd44780_cursor_on(HD44780 *display);
 HD44780_Result hd44780_cursor_off(HD44780 *display);
 HD44780_Result hd44780_autoscroll_on(HD44780 *display);
 HD44780_Result hd44780_autoscroll_off(HD44780 *display);
+HD44780_Result hd44780_backlight_on(HD44780 *display);
+HD44780_Result hd44780_backlight_off(HD44780 *display);
 
 /***** Low-level API *****/
 
