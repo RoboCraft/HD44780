@@ -44,11 +44,11 @@ static HD44780_Result stm32f10x_default_pin_configure(HD44780_GPIO_Interface *dr
 
   switch (mode)
   {
-    case HD44780_PIN_OUTPUT:
+    case HD44780_PINMODE_OUTPUT:
       gpio_config.GPIO_Mode = GPIO_Mode_Out_PP;
       break;
 
-    case HD44780_PIN_INPUT:
+    case HD44780_PINMODE_INPUT:
       gpio_config.GPIO_Mode = GPIO_Mode_IN_FLOATING;
       break;
 
@@ -74,7 +74,7 @@ static HD44780_Result stm32f10x_default_pin_write(HD44780_GPIO_Interface *driver
   HD44780_STM32F10X_RETURN_ASSERT(stm32f10x_pin->gpio != NULL, HD44780_ERROR);
 
   if (stm32f10x_pin->gpio != NULL)
-    GPIO_WriteBit(stm32f10x_pin->gpio, stm32f10x_pin->pinmask, (value == HD44780_PIN_LOW ? RESET : SET));
+    GPIO_WriteBit(stm32f10x_pin->gpio, stm32f10x_pin->pinmask, (value == HD44780_PINSTATE_LOW ? RESET : SET));
 
   return HD44780_OK;
 }
@@ -93,10 +93,10 @@ static HD44780_Result stm32f10x_default_pin_read(HD44780_GPIO_Interface *driver,
   if (stm32f10x_pin->gpio != NULL)
   {
     *value = (GPIO_ReadInputDataBit(stm32f10x_pin->gpio, stm32f10x_pin->pinmask) == RESET ?
-        HD44780_PIN_LOW : HD44780_PIN_HIGH);
+        HD44780_PINSTATE_LOW : HD44780_PINSTATE_HIGH);
   }
   else
-    *value = HD44780_PIN_LOW;
+    *value = HD44780_PINSTATE_LOW;
 
   return HD44780_OK;
 }

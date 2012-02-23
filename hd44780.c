@@ -51,18 +51,18 @@ HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
 
   if (gpios->configure != NULL)
   {
-    HD44780_RETURN_IF_ERROR(gpios->configure(gpios, HD44780_PIN_RS, HD44780_PIN_OUTPUT));
-    HD44780_RETURN_IF_ERROR(gpios->configure(gpios, HD44780_PIN_ENABLE, HD44780_PIN_OUTPUT));
+    HD44780_RETURN_IF_ERROR(gpios->configure(gpios, HD44780_PIN_RS, HD44780_PINMODE_OUTPUT));
+    HD44780_RETURN_IF_ERROR(gpios->configure(gpios, HD44780_PIN_ENABLE, HD44780_PINMODE_OUTPUT));
 
     if (display->cfg.options & HD44780_OPT_USE_RW)
-      HD44780_RETURN_IF_ERROR(gpios->configure(gpios, HD44780_PIN_RW, HD44780_PIN_OUTPUT));
+      HD44780_RETURN_IF_ERROR(gpios->configure(gpios, HD44780_PIN_RW, HD44780_PINMODE_OUTPUT));
 
     if (display->cfg.options & HD44780_OPT_USE_BACKLIGHT)
-      HD44780_RETURN_IF_ERROR(gpios->configure(gpios, HD44780_PIN_BACKLIGHT, HD44780_PIN_OUTPUT));
+      HD44780_RETURN_IF_ERROR(gpios->configure(gpios, HD44780_PIN_BACKLIGHT, HD44780_PINMODE_OUTPUT));
   }
 
   if (display->cfg.options & HD44780_OPT_USE_BACKLIGHT)
-    HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_BACKLIGHT, HD44780_PIN_LOW));
+    HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_BACKLIGHT, HD44780_PINSTATE_LOW));
 
   if (mode == HD44780_MODE_4BIT)
   {
@@ -147,7 +147,7 @@ HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
 HD44780_Result hd44780_write_byte(HD44780 *display, uint8_t value)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  return hd44780_send(display, value, HD44780_PIN_HIGH);
+  return hd44780_send(display, value, HD44780_PINSTATE_HIGH);
 }
 
 HD44780_Result hd44780_write_char(HD44780 *display, char c)
@@ -315,7 +315,7 @@ HD44780_Result hd44780_backlight_on(HD44780 *display)
   HD44780_RETURN_ASSERT(display->cfg.gpios != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(display->cfg.gpios->write != NULL, HD44780_ERROR);
 
-  return display->cfg.gpios->write(display->cfg.gpios, HD44780_PIN_BACKLIGHT, HD44780_PIN_HIGH);
+  return display->cfg.gpios->write(display->cfg.gpios, HD44780_PIN_BACKLIGHT, HD44780_PINSTATE_HIGH);
 }
 
 HD44780_Result hd44780_backlight_off(HD44780 *display)
@@ -324,7 +324,7 @@ HD44780_Result hd44780_backlight_off(HD44780 *display)
   HD44780_RETURN_ASSERT(display->cfg.gpios != NULL, HD44780_ERROR);
   HD44780_RETURN_ASSERT(display->cfg.gpios->write != NULL, HD44780_ERROR);
 
-  return display->cfg.gpios->write(display->cfg.gpios, HD44780_PIN_BACKLIGHT, HD44780_PIN_LOW);
+  return display->cfg.gpios->write(display->cfg.gpios, HD44780_PIN_BACKLIGHT, HD44780_PINSTATE_LOW);
 }
 
 HD44780_Result hd44780_config(HD44780 *display)
@@ -339,9 +339,9 @@ HD44780_Result hd44780_config(HD44780 *display)
   for (unsigned i = 0; i < display->dp_amount; ++i)
   {
     if (gpios->configure != NULL)
-      HD44780_RETURN_IF_ERROR(gpios->configure(gpios, display->dp_first + i, HD44780_PIN_OUTPUT));
+      HD44780_RETURN_IF_ERROR(gpios->configure(gpios, display->dp_first + i, HD44780_PINMODE_OUTPUT));
 
-    HD44780_RETURN_IF_ERROR(gpios->write(gpios, display->dp_first + i, HD44780_PIN_LOW));
+    HD44780_RETURN_IF_ERROR(gpios->write(gpios, display->dp_first + i, HD44780_PINSTATE_LOW));
   }
 
   /* SEE PAGE 45/46 FOR INITIALIZATION SPECIFICATION!
@@ -351,11 +351,11 @@ HD44780_Result hd44780_config(HD44780 *display)
   display->cfg.delay_microseconds(50000);
 
   /* Now we pull both RS and R/W low to begin commands */
-  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_RS, HD44780_PIN_LOW));
-  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_ENABLE, HD44780_PIN_LOW));
+  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_RS, HD44780_PINSTATE_LOW));
+  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_ENABLE, HD44780_PINSTATE_LOW));
 
   if (display->cfg.options & HD44780_OPT_USE_RW)
-    HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_RW, HD44780_PIN_LOW));
+    HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_RW, HD44780_PINSTATE_LOW));
 
   return HD44780_OK;
 }
@@ -363,7 +363,7 @@ HD44780_Result hd44780_config(HD44780 *display)
 HD44780_Result hd44780_command(HD44780 *display, uint8_t value)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_ERROR);
-  return hd44780_send(display, value, HD44780_PIN_LOW);
+  return hd44780_send(display, value, HD44780_PINSTATE_LOW);
 }
 
 HD44780_Result hd44780_send(HD44780 *display, uint8_t value, HD44780_PinState rs_mode)
@@ -377,7 +377,7 @@ HD44780_Result hd44780_send(HD44780 *display, uint8_t value, HD44780_PinState rs
   HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_RS, rs_mode));
 
   if (display->cfg.options & HD44780_OPT_USE_RW)
-    HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_RW, HD44780_PIN_LOW));
+    HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_RW, HD44780_PINSTATE_LOW));
 
   if (display->displayfunction & HD44780_FLAG_8BITMODE)
     HD44780_RETURN_IF_ERROR(hd44780_write_bits(display, value));
@@ -401,7 +401,7 @@ HD44780_Result hd44780_write_bits(HD44780 *display, uint8_t value)
 
   for (unsigned i = 0; i < display->dp_amount; ++i)
   {
-    HD44780_RETURN_IF_ERROR(gpios->configure(gpios, display->dp_first + i, HD44780_PIN_OUTPUT));
+    HD44780_RETURN_IF_ERROR(gpios->configure(gpios, display->dp_first + i, HD44780_PINMODE_OUTPUT));
     HD44780_RETURN_IF_ERROR(gpios->write(gpios, display->dp_first + i, (value >> i) & 0x01));
   }
 
@@ -421,14 +421,14 @@ HD44780_Result hd44780_read_bits(HD44780 *display, uint8_t *value)
   HD44780_GPIO_Interface *const gpios = display->cfg.gpios;
 
   if (display->cfg.options & HD44780_OPT_USE_RW)
-    HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_RW, HD44780_PIN_LOW));
+    HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_RW, HD44780_PINSTATE_LOW));
 
   uint8_t value_read = 0;
   uint8_t bit = 0;
 
   for (unsigned i = 0; i < display->dp_amount; ++i)
   {
-    HD44780_RETURN_IF_ERROR(gpios->configure(gpios, display->dp_first + i, HD44780_PIN_INPUT));
+    HD44780_RETURN_IF_ERROR(gpios->configure(gpios, display->dp_first + i, HD44780_PINMODE_INPUT));
     HD44780_RETURN_IF_ERROR(gpios->read(gpios, display->dp_first + i, &bit));
     value_read = (value_read << i) | (bit & 0x01);
   }
@@ -449,13 +449,13 @@ HD44780_Result hd44780_pulse_enable_pin(HD44780 *display)
   HD44780_GPIO_Interface *const gpios = display->cfg.gpios;
   HD44780_DelayMicrosecondsFn delay_microseconds = display->cfg.delay_microseconds;
 
-  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_ENABLE, HD44780_PIN_LOW));
+  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_ENABLE, HD44780_PINSTATE_LOW));
   delay_microseconds(1);
 
-  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_ENABLE, HD44780_PIN_HIGH));
+  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_ENABLE, HD44780_PINSTATE_HIGH));
   delay_microseconds(1); // enable pulse must be >450ns
 
-  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_ENABLE, HD44780_PIN_LOW));
+  HD44780_RETURN_IF_ERROR(gpios->write(gpios, HD44780_PIN_ENABLE, HD44780_PINSTATE_LOW));
   delay_microseconds(100); // commands need > 37us to settle
 
   return HD44780_OK;

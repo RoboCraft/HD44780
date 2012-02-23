@@ -45,8 +45,8 @@ extern "C" {
 #define HD44780_FLAG_5x8DOTS 0x00
 
 typedef enum { HD44780_OK, HD44780_ERROR } HD44780_Result;
-typedef enum { HD44780_PIN_INPUT, HD44780_PIN_OUTPUT } HD44780_PinMode;
-typedef enum { HD44780_PIN_LOW, HD44780_PIN_HIGH } HD44780_PinState;
+typedef enum { HD44780_PINMODE_INPUT, HD44780_PINMODE_OUTPUT } HD44780_PinMode;
+typedef enum { HD44780_PINSTATE_LOW, HD44780_PINSTATE_HIGH } HD44780_PinState;
 
 /* Abstract HD44780 pin definition */
 typedef enum
@@ -83,7 +83,7 @@ struct HD44780_GPIO_Interface_Struct
   HD44780_Result (*read)(HD44780_GPIO_Interface *driver, HD44780_Pin pin, HD44780_PinState *value);
 };
 
-typedef void (*HD44780_AssertFn)(const char *filename, unsigned line);
+typedef void (*HD44780_AssertFn)(const char *filename, unsigned long line);
 typedef void (*HD44780_DelayMicrosecondsFn)(uint16_t us);
 
 typedef enum
