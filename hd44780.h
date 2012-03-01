@@ -7,44 +7,7 @@ extern "C" {
 
 #include <stdint.h>
 
-#define HD44780_CMD_CLEARDISPLAY 0x01
-#define HD44780_CMD_RETURNHOME 0x02
-#define HD44780_CMD_ENTRYMODESET 0x04
-#define HD44780_CMD_DISPLAYCONTROL 0x08
-#define HD44780_CMD_CURSORSHIFT 0x10
-#define HD44780_CMD_FUNCTIONSET 0x20
-#define HD44780_CMD_SETCGRAMADDR 0x40
-#define HD44780_CMD_SETDDRAMADDR 0x80
-
-// flags for display entry mode
-#define HD44780_FLAG_ENTRYRIGHT 0x00
-#define HD44780_FLAG_ENTRYLEFT 0x02
-#define HD44780_FLAG_ENTRYSHIFTINCREMENT 0x01
-#define HD44780_FLAG_ENTRYSHIFTDECREMENT 0x00
-
-// flags for display on/off control
-#define HD44780_FLAG_DISPLAYON 0x04
-#define HD44780_FLAG_DISPLAYOFF 0x00
-#define HD44780_FLAG_CURSORON 0x02
-#define HD44780_FLAG_CURSOROFF 0x00
-#define HD44780_FLAG_BLINKON 0x01
-#define HD44780_FLAG_BLINKOFF 0x00
-
-// flags for display/cursor shift
-#define HD44780_FLAG_DISPLAYMOVE 0x08
-#define HD44780_FLAG_CURSORMOVE 0x00
-#define HD44780_FLAG_MOVERIGHT 0x04
-#define HD44780_FLAG_MOVELEFT 0x00
-
-// flags for function set
-#define HD44780_FLAG_8BITMODE 0x10
-#define HD44780_FLAG_4BITMODE 0x00
-#define HD44780_FLAG_2LINE 0x08
-#define HD44780_FLAG_1LINE 0x00
-#define HD44780_FLAG_5x10DOTS 0x04
-#define HD44780_FLAG_5x8DOTS 0x00
-
-typedef enum { HD44780_OK, HD44780_ERROR } HD44780_Result;
+typedef enum { HD44780_RESULT_OK, HD44780_RESULT_ERROR, HD44780_RESULT_PENDING } HD44780_Result;
 typedef enum { HD44780_PINMODE_INPUT, HD44780_PINMODE_OUTPUT } HD44780_PinMode;
 typedef enum { HD44780_PINSTATE_LOW, HD44780_PINSTATE_HIGH } HD44780_PinState;
 
@@ -66,7 +29,7 @@ typedef enum
   HD44780_PIN_DP6,
   HD44780_PIN_DP7,
 
-  HD44780_PIN_AMOUNT // enum member counter, must be last
+  HD44780_PINS_AMOUNT // enum member counter, must be last
 } HD44780_Pin;
 
 /* Hardware-dependent pin control interface.
@@ -88,8 +51,8 @@ typedef void (*HD44780_DelayMicrosecondsFn)(uint16_t us);
 
 typedef enum
 {
-  HD44780_OPT_USE_RW = 1 << 0,
-  HD44780_OPT_USE_BACKLIGHT = 1 << 1,
+  HD44780_OPT_USE_RW =          1 << 0,
+  HD44780_OPT_USE_BACKLIGHT =   1 << 1,
 } HD44780_Options;
 
 /* Hardware abstraction layer */
@@ -101,11 +64,13 @@ typedef struct
   HD44780_Options options;
 } HD44780_Config;
 
+typedef enum { HD44780_MODE_4BIT, HD44780_MODE_8BIT } HD44780_Mode;
+typedef enum { HD44780_CHARSIZE_5x8, HD44780_CHARSIZE_5x10 } HD44780_CharSize;
+
 /* HD44780 control structure */
 typedef struct
 {
   HD44780_Config cfg;
-
   uint8_t displayfunction;
   uint8_t displaycontrol;
   uint8_t displaymode;
@@ -113,17 +78,14 @@ typedef struct
   uint8_t columns_amount;
   uint8_t lines_amount;
   uint8_t currline;
-
   HD44780_Pin dp_first;
   unsigned dp_amount;
 } HD44780;
 
-typedef enum { HD44780_MODE_4BIT, HD44780_MODE_8BIT } HD44780_Mode;
-
 /***** User API *****/
 
 HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
-    const HD44780_Config *config, uint8_t cols, uint8_t lines, uint8_t charsize);
+  const HD44780_Config *config, uint8_t cols, uint8_t lines, HD44780_CharSize charsize);
 HD44780_Result hd44780_write_byte(HD44780 *display, uint8_t value);
 HD44780_Result hd44780_write_char(HD44780 *display, char c);
 HD44780_Result hd44780_write_string(HD44780 *display, const char *s);
@@ -146,15 +108,6 @@ HD44780_Result hd44780_autoscroll_on(HD44780 *display);
 HD44780_Result hd44780_autoscroll_off(HD44780 *display);
 HD44780_Result hd44780_backlight_on(HD44780 *display);
 HD44780_Result hd44780_backlight_off(HD44780 *display);
-
-/***** Low-level API *****/
-
-HD44780_Result hd44780_config(HD44780 *display);
-HD44780_Result hd44780_command(HD44780 *display, uint8_t value);
-HD44780_Result hd44780_send(HD44780 *display, uint8_t value, HD44780_PinState rs_mode);
-HD44780_Result hd44780_write_bits(HD44780 *display, uint8_t value);
-HD44780_Result hd44780_read_bits(HD44780 *display, uint8_t *value);
-HD44780_Result hd44780_pulse_enable_pin(HD44780 *display);
 
 #define HD44780_MAKE_5BITS(b4,b3,b2,b1,b0) \
     (((b0) & 1) | \

@@ -18,7 +18,7 @@ typedef struct
 
 typedef struct
 {
-  HD44780_STM32F10x_Pin pins[HD44780_PIN_AMOUNT];
+  HD44780_STM32F10x_Pin pins[HD44780_PINS_AMOUNT];
 } HD44780_STM32F10x_Pinout;
 
 typedef struct
