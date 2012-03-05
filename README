@@ -1,5 +1,17 @@
-Cross-platform library for LCDs with HD44780-compatible controller.
-The library is designed to allow you to write drivers for your hardware
-platform without rewriting the library itself. There is only STM32F10x
-driver at the time. Originally, this was direct port of LiquidCrystalExt
-library for Arduino, from C++ classes to plain C functions and structures.
+Cross-platform library for LCDs with HD44780-compatible controllers written in
+pure C99 (C 1999 year standard). The library is designed to allow you to write
+GPIO drivers for your hardware platform without rewriting the library itself,
+thus making it truly platform independent.
+
+Originally this was a direct port of LiquidCrystalExt library for Arduino,
+from C++ classes to plain C functions and structures, but now it only
+resembles the original interface and is quite different inside.
+
+At the moment there are several GPIO drivers available for the following
+microcontroller families:
+ * STM32F10x
+ * STM32F2xx
+ * STM32F4xx
+ * STM32L1xx
+
+More will be added in the future.
