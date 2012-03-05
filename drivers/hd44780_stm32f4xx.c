@@ -75,11 +75,8 @@ static HD44780_Result stm32f4xx_default_pin_write(HD44780_GPIO_Interface *driver
 
   HD44780_STM32F4XX_RETURN_ASSERT(stm32f4xx_pin->gpio != NULL, HD44780_RESULT_ERROR);
 
-  if (stm32f4xx_pin->gpio != NULL)
-  {
-    GPIO_WriteBit(stm32f4xx_pin->gpio, stm32f4xx_pin->pinmask,
-      (value == HD44780_PINSTATE_LOW ? Bit_RESET : Bit_SET));
-  }
+  GPIO_WriteBit(stm32f4xx_pin->gpio, stm32f4xx_pin->pinmask,
+    (value == HD44780_PINSTATE_LOW ? Bit_RESET : Bit_SET));
 
   return HD44780_RESULT_OK;
 }
