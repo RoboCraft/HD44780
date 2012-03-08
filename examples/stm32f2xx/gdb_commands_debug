@@ -1,0 +1,4 @@
+tar ext :4242
+set remotetimeout 60
+set tcp connect-timeout 60
+load Debug/stm32f4d_lcd_test.elf

@@ -1,0 +1,2 @@
+tar ext :4242
+load Debug/stm32ld_lcd_test.elf
