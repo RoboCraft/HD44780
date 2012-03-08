@@ -32,7 +32,7 @@ typedef enum
   HD44780_PINS_AMOUNT // enum member counter, must be last
 } HD44780_Pin;
 
-/* Hardware-dependent pin control interface.
+/* Hardware-independent pin control interface.
  * configure() function is optional if you want to configure
  * the display pins manually.
  */
@@ -41,9 +41,12 @@ typedef struct HD44780_GPIO_Interface_Struct HD44780_GPIO_Interface;
 
 struct HD44780_GPIO_Interface_Struct
 {
-  HD44780_Result (*configure)(HD44780_GPIO_Interface *driver, HD44780_Pin pin, HD44780_PinMode mode);
-  HD44780_Result (*write)(HD44780_GPIO_Interface *driver, HD44780_Pin pin, HD44780_PinState value);
-  HD44780_Result (*read)(HD44780_GPIO_Interface *driver, HD44780_Pin pin, HD44780_PinState *value);
+  HD44780_Result (*configure)(HD44780_GPIO_Interface *interface,
+    HD44780_Pin pin, HD44780_PinMode mode);
+  HD44780_Result (*write)(HD44780_GPIO_Interface *interface,
+    HD44780_Pin pin, HD44780_PinState value);
+  HD44780_Result (*read)(HD44780_GPIO_Interface *interface,
+    HD44780_Pin pin, HD44780_PinState *value);
 };
 
 typedef void (*HD44780_AssertFn)(const char *filename, unsigned long line);
@@ -51,8 +54,8 @@ typedef void (*HD44780_DelayMicrosecondsFn)(uint16_t us);
 
 typedef enum
 {
-  HD44780_OPT_USE_RW =          1 << 0,
-  HD44780_OPT_USE_BACKLIGHT =   1 << 1,
+  HD44780_OPT_USE_RW = 0x01,
+  HD44780_OPT_USE_BACKLIGHT = 0x02,
 } HD44780_Options;
 
 /* Hardware abstraction layer */
@@ -82,11 +85,9 @@ typedef struct
   unsigned dp_amount;
 } HD44780;
 
-/***** User API *****/
 
 HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
-  const HD44780_Config *config, uint8_t cols, uint8_t lines, HD44780_CharSize charsize);
-HD44780_Result hd44780_write_byte(HD44780 *display, uint8_t value);
+  const HD44780_Config *config, uint8_t columns, uint8_t rows, HD44780_CharSize charsize);
 HD44780_Result hd44780_write_char(HD44780 *display, char c);
 HD44780_Result hd44780_write_string(HD44780 *display, const char *s);
 HD44780_Result hd44780_clear(HD44780 *display);
@@ -95,9 +96,8 @@ HD44780_Result hd44780_scroll_left(HD44780 *display);
 HD44780_Result hd44780_scroll_right(HD44780 *display);
 HD44780_Result hd44780_left_to_right(HD44780 *display);
 HD44780_Result hd44780_right_to_left(HD44780 *display);
-HD44780_Result hd44780_create_char(HD44780 *display, uint8_t location, const uint8_t *charmap);
-HD44780_Result hd44780_move_cursor(HD44780 *display, uint8_t col, uint8_t line);
-
+HD44780_Result hd44780_create_char(HD44780 *display, uint8_t code, const uint8_t *charmap);
+HD44780_Result hd44780_move_cursor(HD44780 *display, uint8_t column, uint8_t row);
 HD44780_Result hd44780_display_on(HD44780 *display);
 HD44780_Result hd44780_display_off(HD44780 *display);
 HD44780_Result hd44780_blink_on(HD44780 *display);

@@ -73,6 +73,7 @@
 
 HD44780_Result hd44780_config(HD44780 *display);
 HD44780_Result hd44780_command(HD44780 *display, uint8_t value);
+HD44780_Result hd44780_write_byte(HD44780 *display, uint8_t value);
 HD44780_Result hd44780_send(HD44780 *display, uint8_t value, HD44780_PinState rs_mode);
 HD44780_Result hd44780_write_bits(HD44780 *display, uint8_t value);
 HD44780_Result hd44780_read_bits(HD44780 *display, uint8_t *value);
@@ -187,12 +188,6 @@ HD44780_Result hd44780_init(HD44780 *display, HD44780_Mode mode,
   HD44780_RETURN_IF_ERROR(hd44780_command(display, HD44780_CMD_ENTRYMODESET | display->displaymode));
 
   return HD44780_RESULT_OK;
-}
-
-HD44780_Result hd44780_write_byte(HD44780 *display, uint8_t value)
-{
-  HD44780_RETURN_ASSERT(display != NULL, HD44780_RESULT_ERROR);
-  return hd44780_send(display, value, HD44780_PINSTATE_HIGH);
 }
 
 HD44780_Result hd44780_write_char(HD44780 *display, char c)
@@ -413,6 +408,12 @@ HD44780_Result hd44780_command(HD44780 *display, uint8_t value)
 {
   HD44780_RETURN_ASSERT(display != NULL, HD44780_RESULT_ERROR);
   return hd44780_send(display, value, HD44780_PINSTATE_LOW);
+}
+
+HD44780_Result hd44780_write_byte(HD44780 *display, uint8_t value)
+{
+  HD44780_RETURN_ASSERT(display != NULL, HD44780_RESULT_ERROR);
+  return hd44780_send(display, value, HD44780_PINSTATE_HIGH);
 }
 
 HD44780_Result hd44780_send(HD44780 *display, uint8_t value, HD44780_PinState rs_mode)
