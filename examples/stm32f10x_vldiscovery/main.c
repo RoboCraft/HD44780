@@ -36,9 +36,8 @@ int main(void)
       static unsigned counter = 0;
 
       const size_t buf_size = lcd.columns_amount + 1;
-      char buf[buf_size], *end = buf;
+      char buf[buf_size];
       snprintf(buf, buf_size, "%d", counter);
-      *end = 0;
 
       ++counter;
 
